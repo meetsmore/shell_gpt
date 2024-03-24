@@ -59,9 +59,9 @@ dev = [
 sgpt = "sgpt:cli"
 
 [project.urls]
-homepage = "https://github.com/ther1d/shell_gpt"
-repository = "https://github.com/ther1d/shell_gpt"
-documentation = "https://github.com/TheR1D/shell_gpt/blob/main/README.md"
+homepage = "https://github.com/meetsmore/shell_gpt"
+repository = "https://github.com/meetsmore/shell_gpt"
+documentation = "https://github.com/meetsmore/shell_gpt/blob/master/README.md"
 
 [tool.hatch.version]
 path = "sgpt/__version__.py"

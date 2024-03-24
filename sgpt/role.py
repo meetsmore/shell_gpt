@@ -41,16 +41,34 @@ If you need to store any data, assume it will be stored in the conversation.
 APPLY MARKDOWN formatting when possible."""
 # Note that output for all roles containing "APPLY MARKDOWN" will be formatted as Markdown.
 
-ROLE_TEMPLATE = "You are {name}\n{role}"
-
+def role_template(name: str, role: str, message_to_role: str) -> str:
+    if message_to_role:
+        return f"{role}"
+    else:
+        return f"You are {name}\n{role}"
 
 class SystemRole:
     storage: Path = Path(cfg.get("ROLE_STORAGE_PATH"))
+
+    """
+    Inside of a role.json file:
+    "message_to_role": {
+		"phrase": "あなたの任務は、日本語から英語",
+		"name": "jp-to-en"
+	}
+
+    After being loaded into message_to_role:
+    {
+        "あなたの任務は、日本語から英語": "jp-to-en"
+    }
+    """
+    message_to_role: Dict[str, str] = {}
 
     def __init__(
         self,
         name: str,
         role: str,
+        message_to_role: Optional[Dict[str, str]] = None,
         variables: Optional[Dict[str, str]] = None,
     ) -> None:
         self.storage.mkdir(parents=True, exist_ok=True)
@@ -58,6 +76,7 @@ class SystemRole:
         if variables:
             role = role.format(**variables)
         self.role = role
+        self.message_to_role = message_to_role
 
     @classmethod
     def create_defaults(cls) -> None:
@@ -71,6 +90,16 @@ class SystemRole:
         ):
             if not default_role._exists:
                 default_role._save()
+
+        for file in cls.storage.iterdir():
+            if file.is_file() and file.name.endswith(".json"):
+                # read file
+                role = json.loads(file.read_text())
+                # load message_to_role mappings
+                message_to_role = role.get("message_to_role")
+
+                if message_to_role:
+                    cls.message_to_role[message_to_role["phrase"]] = message_to_role["name"]
 
     @classmethod
     def get(cls, name: str) -> "SystemRole":
@@ -106,9 +135,17 @@ class SystemRole:
     def get_role_name(cls, initial_message: str) -> Optional[str]:
         if not initial_message:
             return None
+
         message_lines = initial_message.splitlines()
+
+        # skip the initial "system: "
+        first_twenty_lines = message_lines[0][8:27]
+
         if "You are" in message_lines[0]:
             return message_lines[0].split("You are ")[1].strip()
+        elif cls.message_to_role.get(first_twenty_lines):
+            return cls.message_to_role[first_twenty_lines]
+
         return None
 
     @classmethod
@@ -145,8 +182,15 @@ class SystemRole:
                 abort=True,
             )
 
-        self.role = ROLE_TEMPLATE.format(name=self.name, role=self.role)
-        self._file_path.write_text(json.dumps(self.__dict__), encoding="utf-8")
+        """
+        Use first 20 characters as the mapping from message to role
+        so that we don't have to rely on shell_gpt's existing hardcoded
+        "You are" prefix to determine the role
+        """
+        message_to_role = self.role[:20]
+
+        self.role = role_template(name=self.name, role=self.role, message_to_role=message_to_role)
+        self._file_path.write_text(json.dumps(self.__dict__, ensure_ascii=False), encoding="utf-8")
 
     def delete(self) -> None:
         if self._exists:
